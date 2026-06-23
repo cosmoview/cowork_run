@@ -569,11 +569,11 @@ const BUILD_SIZES = [
 // ---------- 점수 기반 난이도 (학습 구간 ~ 무한 모드) ----------
 // 점수가 minScore 이상이면 그 구간 적용. 0~1500은 동일한 쉬운 모드 (학습 구간)
 const SCORE_DIFFICULTY = [
-  { minScore:0,     speed:2.0, spawnBase:130, spawnRange:90, cabinetRate:0.15 },  // 학습 구간 (퀴즈 3개)
-  { minScore:1500,  speed:2.4, spawnBase:80,  spawnRange:65, cabinetRate:0.35 },  // 무한 모드 시작
-  { minScore:3000,  speed:2.7, spawnBase:65,  spawnRange:55, cabinetRate:0.50 },
-  { minScore:5000,  speed:3.0, spawnBase:55,  spawnRange:45, cabinetRate:0.60 },
-  { minScore:10000, speed:3.3, spawnBase:50,  spawnRange:40, cabinetRate:0.65 },
+  { minScore:0,     speed:2.4,  spawnBase:108, spawnRange:75, cabinetRate:0.15 },  // 학습 구간 (퀴즈 3개)
+  { minScore:1500,  speed:2.88, spawnBase:67,  spawnRange:54, cabinetRate:0.35 },  // 무한 모드 시작
+  { minScore:3000,  speed:3.24, spawnBase:54,  spawnRange:46, cabinetRate:0.50 },
+  { minScore:5000,  speed:3.6,  spawnBase:46,  spawnRange:38, cabinetRate:0.60 },
+  { minScore:10000, speed:3.96, spawnBase:42,  spawnRange:33, cabinetRate:0.65 },
 ];
 function getDiff(){
   for(let i = SCORE_DIFFICULTY.length - 1; i >= 0; i--){
@@ -643,12 +643,12 @@ let groundY = H-46;
 function reset(){
   player={x:70,y:groundY-40,w:22,h:40,vy:0,onGround:true,run:0,runFrame:0};
   obstacles=[]; particles=[]; items=[];
-  scrollX=0; speed=2.0; score=0; lives=3;
+  scrollX=0; speed=2.4; score=0; lives=3;
   zoneIdx=0; frame=0; invuln=0; shake=0;
   approachFrame = -1; invincibleFrames = 0; invincibleKind = '';
   zoneHitless = true;
-  spawnTimer = 130;        // 첫 장애물까지 ~2.2초
-  itemSpawnTimer = 600;    // 첫 아이템까지 ~10초
+  spawnTimer = 108;        // 첫 장애물까지 (속도 20%↑에 맞춤)
+  itemSpawnTimer = 540;    // 첫 아이템까지 ~9초
   updateHUD();
 }
 
