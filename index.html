@@ -28,7 +28,7 @@
   }
   #wrap{
     position:relative;
-    width:100%;max-width:880px;aspect-ratio:16/10;
+    width:100%;max-width:1000px;aspect-ratio:16/10;
     background:#05060a;
     box-shadow:0 0 0 4px #000, 0 0 0 10px #1b1f2e, 0 25px 60px rgba(0,0,0,.7);
     overflow:hidden;
@@ -82,6 +82,8 @@
   }
   .btn:active{transform:translateY(4px);box-shadow:0 1px 0 var(--skt-red-deep);}
   .btn.ghost{background:#222843;box-shadow:0 5px 0 #11152a;}
+  .btn:disabled{opacity:0.45;cursor:default;}
+  .btn:disabled:active{transform:none;}
 
   .hint{margin-top:18px;font-size:11px;color:#7a7fa6;line-height:1.9;}
   .key{display:inline-block;background:#0a0d18;padding:2px 8px;border:2px solid #3a416b;color:var(--paper);}
@@ -276,23 +278,29 @@
 
   /* Quiz */
   #quiz{position:absolute;inset:0;z-index:45;display:flex;align-items:center;justify-content:center;
-    background:rgba(5,6,12,.82);padding:5%;}
+    background:rgba(5,6,12,.82);padding:3%;
+    user-select:none;-webkit-user-select:none;}
   #quiz.hidden{display:none;}
-  .qcard{width:min(560px,96%);max-height:90%;overflow-y:auto;background:linear-gradient(160deg,#161b30,#0c0f1c);
-    border:4px solid var(--skt-red);box-shadow:0 0 0 4px #000,0 18px 40px rgba(0,0,0,.6);padding:26px;}
-  .qzone{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent);letter-spacing:1px;margin-bottom:12px;}
-  .qq{font-size:17px;line-height:1.6;margin-bottom:20px;color:#fff;font-weight:700;}
-  .opts{display:flex;flex-direction:column;gap:10px;}
-  .opt{font-family:'Galmuri11',monospace;font-size:15px;text-align:left;cursor:pointer;
-    padding:13px 16px;background:#0a0d18;color:var(--paper);border:3px solid #2c3350;transition:all .1s;}
+  .qcard{width:min(560px,96%);max-height:96%;overflow-y:auto;background:linear-gradient(160deg,#161b30,#0c0f1c);
+    border:4px solid var(--skt-red);box-shadow:0 0 0 4px #000,0 18px 40px rgba(0,0,0,.6);
+    padding:clamp(14px,2.5vh,24px) clamp(16px,3vw,26px);box-sizing:border-box;}
+  .qzone{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent);letter-spacing:1px;
+    margin-bottom:clamp(6px,1.2vh,12px);}
+  .qq{font-size:clamp(14px,2.3vh,17px);line-height:1.45;margin-bottom:clamp(10px,1.8vh,18px);color:#fff;font-weight:700;}
+  .opts{display:flex;flex-direction:column;gap:clamp(6px,1.1vh,10px);}
+  .opt{font-family:'Galmuri11',monospace;font-size:clamp(12px,1.9vh,15px);text-align:left;cursor:pointer;
+    padding:clamp(9px,1.5vh,13px) 16px;background:#0a0d18;color:var(--paper);border:3px solid #2c3350;transition:all .1s;}
   .opt:hover{border-color:#5563a0;transform:translateX(3px);}
+  .opt.selected{border-color:var(--accent);background:rgba(255,210,63,.14);transform:translateX(3px);}
   .opt.correct{border-color:var(--good);background:rgba(54,211,153,.16);}
   .opt.wrong{border-color:var(--skt-red);background:rgba(234,25,23,.16);}
+  .opt.locked{cursor:default;}
+  .opt.locked:hover{transform:none;}
   .opt .mk{color:var(--accent);margin-right:8px;font-family:'Press Start 2P';font-size:11px;}
-  .explain{margin-top:16px;font-size:13px;line-height:1.8;color:#bfc4e6;
+  .explain{margin-top:clamp(8px,1.5vh,16px);font-size:clamp(11px,1.7vh,13px);line-height:1.65;color:#bfc4e6;
     border-left:4px solid var(--accent);padding:8px 0 8px 14px;display:none;}
   .explain.show{display:block;}
-  .qnext{margin-top:18px;text-align:center;}
+  .qnext{margin-top:clamp(10px,1.8vh,18px);text-align:center;}
 
   /* Ranking table */
   .rank{width:min(460px,92%);margin:14px auto 0;}
@@ -309,7 +317,7 @@
   .endline{font-size:13px;color:#c9c2e0;margin-bottom:4px;}
 
   @media (max-width:560px){
-    .qq{font-size:15px;} .opt{font-size:13px;}
+    .opt{font-size:13px;}
   }
 </style>
 </head>
@@ -502,9 +510,26 @@ const RankStore = {
 
 // ---------- canvas ----------
 const cv=document.getElementById('game'), ctx=cv.getContext('2d');
-const W=440, H=275;               // internal pixel resolution
-cv.width=W; cv.height=H;
-ctx.imageSmoothingEnabled=false;
+const W=440, H=275;               // 게임 좌표계 (로직은 이 기준으로 동작)
+
+// 화면에 표시되는 실제 크기 + DPR에 맞춰 캔버스 내부 해상도를 키워 선명하게 렌더
+function setupCanvasResolution(){
+  const rect = cv.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  // 표시 크기 × DPR 만큼의 실제 픽셀을 확보 (최소 W,H 보장)
+  const targetW = Math.max(W, Math.round(rect.width  * dpr));
+  const targetH = Math.max(H, Math.round(rect.height * dpr));
+  if(cv.width !== targetW || cv.height !== targetH){
+    cv.width = targetW;
+    cv.height = targetH;
+  }
+  // 게임은 항상 W×H 좌표계로 그리고, 캔버스가 알아서 확대
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+  ctx.imageSmoothingEnabled = false;   // 픽셀아트 — 부드럽게 뭉개지 않음
+}
+setupCanvasResolution();
+// 창 크기 변경·전체화면 전환 시 재설정
+window.addEventListener('resize', setupCanvasResolution);
 
 // ---------- palette / zones ----------
 const ZONES=[
@@ -1216,30 +1241,57 @@ document.getElementById('arrEnter').addEventListener('click', enterFromArrival);
 function openQuiz(){
   state='quiz';
   quizLocked=false;
+  selectedOpt=-1;
   const q=QUIZ[zoneIdx];
   document.getElementById('qzone').textContent=`퀴즈 ${zoneIdx+1} / 3`;
   document.getElementById('qtext').textContent=q.q;
   const ow=document.getElementById('qopts'); ow.innerHTML='';
   const ex=document.getElementById('qexplain'); ex.className='explain'; ex.textContent=q.ex;
-  const nb=document.getElementById('qnextBtn'); nb.style.display='inline-block'; nb.textContent='건너뛰기 ▶';
+  const nb=document.getElementById('qnextBtn');
+  // 확인 전 상태: 정답 확인 버튼 (선택 전엔 비활성 느낌)
+  nb.style.display='inline-block';
+  nb.textContent='정답 확인';
+  nb.disabled = true;
+  nb.classList.add('ghost');
   const marks=['A','B','C','D'];
   q.opts.forEach((t,i)=>{
     const b=document.createElement('button'); b.className='opt'; b.type='button';
     b.innerHTML=`<span class="mk">${marks[i]}</span>${t}`;
-    b.addEventListener('click',()=>answer(i,b));
+    b.addEventListener('click',()=>selectOption(i));
     ow.appendChild(b);
   });
   document.getElementById('quiz').classList.remove('hidden');
 }
 let quizLocked=false;
-function answer(i,btn){
-  if(quizLocked) return; quizLocked=true;
+let selectedOpt=-1;
+// 1단계 — 보기 선택 (채점 전, 자유롭게 변경 가능)
+function selectOption(i){
+  if(quizLocked) return;              // 이미 채점됐으면 변경 불가
+  selectedOpt = i;
+  const opts=[...document.querySelectorAll('#qopts .opt')];
+  opts.forEach((o,idx)=> o.classList.toggle('selected', idx===i));
+  // 선택이 생기면 '정답 확인' 버튼 활성화
+  const nb=document.getElementById('qnextBtn');
+  nb.disabled = false;
+  nb.classList.remove('ghost');
+}
+// 2단계 — 정답 확인 (채점 + 해설)
+function checkAnswer(){
+  if(quizLocked || selectedOpt < 0) return;
+  quizLocked=true;
   const q=QUIZ[zoneIdx];
   const opts=[...document.querySelectorAll('#qopts .opt')];
-  if(i===q.ans){ btn.classList.add('correct'); score+=200; }     // 트리거 즉시 발동 방지를 위해 200으로 축소
-  else{ btn.classList.add('wrong'); if(opts[q.ans]) opts[q.ans].classList.add('correct'); }
+  opts.forEach(o=>{ o.classList.remove('selected'); o.classList.add('locked'); });
+  if(selectedOpt===q.ans){ opts[selectedOpt].classList.add('correct'); score+=200; }
+  else{
+    opts[selectedOpt].classList.add('wrong');
+    if(opts[q.ans]) opts[q.ans].classList.add('correct');   // 정답도 함께 표시
+  }
   document.getElementById('qexplain').classList.add('show');
-  const nb=document.getElementById('qnextBtn'); nb.style.display='inline-block'; nb.textContent='계속 달리기 ▶';
+  const nb=document.getElementById('qnextBtn');
+  nb.textContent='계속 달리기 ▶';
+  nb.disabled=false;
+  nb.classList.remove('ghost');
   updateHUD();
 }
 function advanceFromQuiz(){
@@ -1260,7 +1312,10 @@ function advanceFromQuiz(){
   state='play';
   updateHUD();
 }
-document.getElementById('qnextBtn').addEventListener('click',advanceFromQuiz);
+document.getElementById('qnextBtn').addEventListener('click',()=>{
+  if(!quizLocked){ checkAnswer(); }     // 아직 채점 전 → 정답 확인
+  else { advanceFromQuiz(); }            // 채점 후 → 다음으로
+});
 
 // 무한 모드 진입 안내 카드 (1.8초 자동 닫힘)
 let infiniteAutoTimer = null;
