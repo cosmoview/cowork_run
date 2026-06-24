@@ -594,21 +594,22 @@ const BUILD_SIZES = [
 // ---------- 점수 기반 난이도 (학습 구간 ~ 무한 모드) ----------
 // 점수가 minScore 이상이면 그 구간 적용. 0~1500은 동일한 쉬운 모드 (학습 구간)
 const SCORE_DIFFICULTY = [
-  { minScore:0,     speed:2.4,  spawnBase:108, spawnRange:75, cabinetRate:0.15 },  // 학습 구간 (퀴즈 3개)
-  { minScore:1500,  speed:2.88, spawnBase:67,  spawnRange:54, cabinetRate:0.35 },  // 무한 모드 시작
-  { minScore:3000,  speed:3.24, spawnBase:54,  spawnRange:46, cabinetRate:0.50 },
-  { minScore:5000,  speed:3.6,  spawnBase:46,  spawnRange:38, cabinetRate:0.60 },
-  { minScore:10000, speed:3.96, spawnBase:42,  spawnRange:33, cabinetRate:0.65 },
+  { minScore:0,     speed:2.4,  spawnBase:108, spawnRange:75, cabinetRate:0.15 },  // 학습 구간 (퀴즈 3개, ~1200점)
+  { minScore:1200,  speed:2.88, spawnBase:67,  spawnRange:54, cabinetRate:0.35 },  // 무한 모드 시작
+  { minScore:2500,  speed:3.24, spawnBase:54,  spawnRange:46, cabinetRate:0.50 },
+  { minScore:4500,  speed:3.6,  spawnBase:46,  spawnRange:38, cabinetRate:0.60 },
+  { minScore:9000,  speed:3.96, spawnBase:42,  spawnRange:33, cabinetRate:0.65 },
 ];
 function getDiff(){
+  // 난이도는 runScore(순수 주행 진행도) 기준 — 보너스로 난이도가 튀지 않게
   for(let i = SCORE_DIFFICULTY.length - 1; i >= 0; i--){
-    if(score >= SCORE_DIFFICULTY[i].minScore) return SCORE_DIFFICULTY[i];
+    if(runScore >= SCORE_DIFFICULTY[i].minScore) return SCORE_DIFFICULTY[i];
   }
   return SCORE_DIFFICULTY[0];
 }
 
 // 점수 트리거 — 학습 구간 3개 퀴즈
-const QUIZ_SCORES = [500, 1000, 1500];
+const QUIZ_SCORES = [400, 800, 1200];
 const MAX_SCORE = 999999;
 
 
@@ -658,6 +659,8 @@ const ITEM_BLINK_THRESHOLD = 60; // 무적 끝 1초 전 깜빡임 시작
 let state='title';
 let player, obstacles, particles, items;
 let scrollX, speed, score, lives, zoneIdx, frame, invuln, shake, curId='';
+let runScore = 0;                // 순수 주행 점수 (거리/시간 기반) — 퀴즈 트리거·난이도 판정 기준
+let bonusScore = 0;             // 보너스 점수 (무피격·정답·파괴) — 타이밍에 영향 안 줌
 let approachFrame = -1;          // 도착 감속 시작 프레임 (-1: 일반 주행, -2: 정지 중)
 let invincibleFrames = 0;        // 무적 남은 프레임
 let invincibleKind = '';         // 'skill' or 'automation'
@@ -669,6 +672,7 @@ function reset(){
   player={x:70,y:groundY-40,w:22,h:40,vy:0,onGround:true,run:0,runFrame:0};
   obstacles=[]; particles=[]; items=[];
   scrollX=0; speed=2.4; score=0; lives=3;
+  runScore=0; bonusScore=0;
   zoneIdx=0; frame=0; invuln=0; shake=0;
   approachFrame = -1; invincibleFrames = 0; invincibleKind = '';
   zoneHitless = true;
@@ -768,8 +772,9 @@ function update(){
   }
 
   // 점수 트리거: 학습 구간(zoneIdx 0,1,2)에서 트리거 점수 도달 시 도착 시퀀스
+  // runScore(순수 주행 점수) 기준 — 보너스 점수는 퀴즈 타이밍에 영향 주지 않음
   const isLearning = zoneIdx < QUIZ_SCORES.length;
-  if(isLearning && approachFrame === -1 && score >= QUIZ_SCORES[zoneIdx]){
+  if(isLearning && approachFrame === -1 && runScore >= QUIZ_SCORES[zoneIdx]){
     approachFrame = frame;
   }
 
@@ -792,10 +797,11 @@ function update(){
   }
 
   scrollX += speed;
-  // 점수 누적 — 정지/감속 중엔 가산 안 함
+  // 주행 점수 누적 — 정지/감속 중엔 가산 안 함
   if(approachFrame === -1){
-    score += 10 / FPS;
+    runScore += 10 / FPS;
   }
+  score = runScore + bonusScore;   // 표시·랭킹용 총점
 
   // physics
   player.vy += 0.55; player.y += player.vy;
@@ -844,7 +850,7 @@ function update(){
       o.hit = true;
       if(invincibleFrames > 0){
         // 무적 중 — 장애물 파괴 +50점
-        score += 50;
+        bonusScore += 50;
         const color = invincibleKind === 'skill' ? '#5acfff' : '#ffd23f';
         spawnPickupFx(o.x + o.w/2, o.y + o.h/2, color);
         return false;
@@ -1162,6 +1168,8 @@ function loop(){
 
 // ---------- HUD ----------
 function updateHUD(){
+  // 총점 = 주행 점수 + 보너스 점수 (정지 중 보너스도 즉시 반영)
+  score = runScore + bonusScore;
   // 점수 — 콤마 포함 표시 (6자리 가독성)
   const sFloor = Math.floor(score);
   document.getElementById('scoreVal').textContent = sFloor.toLocaleString();
@@ -1192,11 +1200,12 @@ function updateHUD(){
     const dest = BUILDINGS[zoneIdx];
     const target = QUIZ_SCORES[zoneIdx];
     const prev = zoneIdx === 0 ? 0 : QUIZ_SCORES[zoneIdx-1];
-    const segScore = Math.max(0, score - prev);
+    // 진행도는 runScore(주행 점수) 기준 — 보너스와 무관하게 정확
+    const segScore = Math.max(0, runScore - prev);
     const segTotal = target - prev;
     const pct = Math.min(100, (segScore / segTotal) * 100);
     zlab.textContent = `▶ ${dest.name}`;
-    plab.textContent = `다음 퀴즈까지 ${Math.max(0, Math.ceil(target - sFloor))}점`;
+    plab.textContent = `다음 퀴즈까지 ${Math.max(0, Math.ceil(target - runScore))}점`;
     fill.style.width = pct + '%';
     icon.textContent = ['📚','⏰','🔌'][zoneIdx];
   }
@@ -1232,7 +1241,7 @@ function enterFromArrival(){
   clearTimeout(arrivalAutoTimer);
   if(state !== 'arrival') return;     // 이미 다른 화면으로 넘어갔으면 무시
   document.getElementById('arrivalCard').classList.add('hidden');
-  if(zoneHitless) score += 200;       // 무피격 보너스
+  if(zoneHitless) bonusScore += 200;  // 무피격 보너스 (타이밍에 영향 없음)
   openQuiz();
 }
 document.getElementById('arrEnter').addEventListener('click', enterFromArrival);
@@ -1282,7 +1291,7 @@ function checkAnswer(){
   const q=QUIZ[zoneIdx];
   const opts=[...document.querySelectorAll('#qopts .opt')];
   opts.forEach(o=>{ o.classList.remove('selected'); o.classList.add('locked'); });
-  if(selectedOpt===q.ans){ opts[selectedOpt].classList.add('correct'); score+=200; }
+  if(selectedOpt===q.ans){ opts[selectedOpt].classList.add('correct'); bonusScore+=200; }
   else{
     opts[selectedOpt].classList.add('wrong');
     if(opts[q.ans]) opts[q.ans].classList.add('correct');   // 정답도 함께 표시
